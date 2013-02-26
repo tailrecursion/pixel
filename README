@@ -1,13 +1,14 @@
 # pixel
 
-FIXME: write description
+Datomic-based usage tracking of freshdiet-app.
 
-## Usage
+## Development
 
-FIXME: write
+### Install Datomic
+
+* Download the version of [Datomic Pro](http://downloads.datomic.com/pro.html) specified in the `project.clj`.
+* Unpack and install using `mvn` per the README in the zip file.
 
 ## License
 
-Copyright (C) 2013 FIXME
-
-Distributed under the Eclipse Public License, the same as Clojure.
+Copyright (C) 2013 The Fresh Diet, Inc.
