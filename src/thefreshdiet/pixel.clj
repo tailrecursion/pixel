@@ -44,25 +44,22 @@
 
 (defn attach-pair [event-id [k v]]
   (let [pair-id (d/tempid :db.part/user)]
-    [[:db/add pair-id :event.env/key k]
-     [:db/add pair-id :event.env/val v]
+    [[:db/add pair-id :pair/key k]
+     [:db/add pair-id :pair/val v]
      [:db/add event-id :event/env pair-id]]))
 
 (defn attach-env [event-id env]
-  (let [event-id (d/tempid :db.part/user)]
-    (vec (mapcat (partial attach-pair event-id) (seq env)))))
+  (vec (mapcat (partial attach-pair event-id) (seq env))))
 
 (defn append-event
-  "takes fully cooked stuff"
-  [request-uri referer-uri date env]
+  [request-uri referer-uri env]
   (let [conn (d/connect db-uri)
         event-id (d/tempid :db.part/user)]
     (d/transact
      conn
      (into [{:db/id event-id
              :event/request-uri request-uri
-             :event/referer-uri referer-uri
-             :event/time date}]
+             :event/referer-uri referer-uri}]
            (attach-env event-id env)))))
 
 (comment
