@@ -1,5 +1,9 @@
 (ns thefreshdiet.pixel
-  (:require [datomic.api :refer [q db] :as d])
+  (:require [datomic.api         :refer [q db] :as d]
+            [compojure.core      :refer [defroutes context POST]]
+            [compojure.route     :refer [not-found]]
+            [ring.adapter.jetty  :refer [run-jetty]]
+            [ring.middleware.edn :refer [wrap-edn-params]])
   (:import java.net.URI
            java.util.Date))
 
@@ -25,7 +29,7 @@
 
       ;; logged HTTP request event
       {:db/id #db/id [:db.part/db]
-       :db/ident :event/request-uri
+       :db/ident :event/rennnquest-uri
        :db/valueType :db.type/uri
        :db/cardinality :db.cardinality/one
        :db.install/_attribute :db.part/db}
@@ -61,6 +65,24 @@
              :event/request-uri request-uri
              :event/referer-uri referer-uri}]
            (attach-env event-id env)))))
+
+(defn generate-response [data & [status]]
+  {:status (or status 200)
+   :headers {"Content-Type" "application/edn"}
+   :body (pr-str data)})
+
+(defroutes apiv1-routes
+  (POST "/event" [request-uri referer-uri env]
+    (append-event request-uri referer-uri env)))
+
+(defroutes app-routes
+  (context "/apiv1" [] (-> apiv1-routes wrap-edn-params))
+  (not-found "Not found."))
+
+(def app app-routes)
+
+(defn -main [port]
+  (run-jetty app {:port (Integer. port)}))
 
 (comment
 
