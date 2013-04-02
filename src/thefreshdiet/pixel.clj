@@ -1,70 +1,108 @@
 (ns thefreshdiet.pixel
-  (:require [datomic.api         :refer [q db] :as d]
-            [compojure.core      :refer [defroutes context POST]]
-            [compojure.route     :refer [not-found]]
-            [ring.adapter.jetty  :refer [run-jetty]]
-            [ring.middleware.edn :refer [wrap-edn-params]])
+  (:require [datomic.api           :refer [q db] :as d]
+            [compojure.core        :refer [defroutes context POST]]
+            [compojure.route       :refer [not-found]]
+            [ring.adapter.jetty    :refer [run-jetty]]
+            [ring.middleware.edn   :refer [wrap-edn-params]]
+            [clojure.tools.logging :refer [info error] :as log])
   (:import java.net.URI
            java.util.Date))
 
-(def db-uri "datomic:mem://foo")
+;;; Configuration
 
-(defn setup! []
+(def envs
+  "Map of environment name strings to settings maps.  Settings maps
+  should contain, at a minimum, a :db-uri key.  The \"prod\"
+  environment key is required."
+  {"dev"  {:env :dev
+           :db-uri "datomic:mem://pixel"}
+   "prod" {:env :prod
+           :db-uri ""}})
+
+(def cfg
+  "Looks at the ENV OS environment variable and derefs to the
+corresponding config map value.  Defaults to prod."
+  (delay
+   (let [env (or (System/getenv "ENV") "prod")]
+     (assert (contains? envs env))
+     (info "pixel environment:" env)
+     (get envs env))))
+
+;;; Schema
+
+(def schema
+  "Pixel schema.  Event entities have request URI, referer URI,
+  instant, and environment associations."
+  [{:db/ident :pixel.pair/key
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.pair/val
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
+
+   {:db/ident :pixel.event/request-uri
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/uri
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/referer-uri
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/uri
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/time
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/instant
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/env
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/ref
+    :db/cardinality :db.cardinality/many
+    :db.install/_attribute :db.part/db}])
+
+(defn load!
+  "Creates the database at db-uri and loads txs. Dev/testing only."
+  [db-uri txs]
   (d/create-database db-uri)
   (let [conn (d/connect db-uri)]
-    (d/transact
-     conn
-     [
-      ;; environment key-value pairs
-      {:db/id #db/id [:db.part/db]
-       :db/ident :pair/key
-       :db/valueType :db.type/string
-       :db/cardinality :db.cardinality/one
-       :db.install/_attribute :db.part/db}
-      {:db/id #db/id [:db.part/db]
-       :db/ident :pair/val
-       :db/valueType :db.type/string
-       :db/cardinality :db.cardinality/one
-       :db.install/_attribute :db.part/db}
+    (d/transact conn txs)))
 
-      ;; logged HTTP request event
-      {:db/id #db/id [:db.part/db]
-       :db/ident :event/rennnquest-uri
-       :db/valueType :db.type/uri
-       :db/cardinality :db.cardinality/one
-       :db.install/_attribute :db.part/db}
-      {:db/id #db/id [:db.part/db]
-       :db/ident :event/referer-uri
-       :db/valueType :db.type/uri
-       :db/cardinality :db.cardinality/one
-       :db.install/_attribute :db.part/db}
-      {:db/id #db/id [:db.part/db]
-       :db/ident :event/env
-       :db/valueType :db.type/ref
-       :db/cardinality :db.cardinality/many
-       :db.install/_attribute :db.part/db}
-      ])))
+;;; Transactions
 
-
-(defn attach-pair [event-id [k v]]
+(defn attach-pair
+  "Provided an event id and a [k v] pair, attaches the pair to the
+  event's environment map.  Returns a tx."
+  [event-id [k v]]
   (let [pair-id (d/tempid :db.part/user)]
-    [[:db/add pair-id :pair/key k]
-     [:db/add pair-id :pair/val v]
-     [:db/add event-id :event/env pair-id]]))
+    [[:db/add pair-id :pixel.pair/key k]
+     [:db/add pair-id :pixel.pair/val v]
+     [:db/add event-id :pixel.event/env pair-id]]))
 
-(defn attach-env [event-id env]
+(defn attach-env
+  "Provided an event id and a map of strings to strings, returns a tx
+  with the env attached."
+  [event-id env]
   (vec (mapcat (partial attach-pair event-id) (seq env))))
 
-(defn append-event
-  [request-uri referer-uri env]
-  (let [conn (d/connect db-uri)
+(defn store-event!
+  "Transacts information about an event."
+  [request-uri referer-uri time env]
+  (let [conn (d/connect (:db-uri @cfg))
         event-id (d/tempid :db.part/user)]
-    (d/transact
+    (d/transact-async
      conn
      (into [{:db/id event-id
-             :event/request-uri request-uri
-             :event/referer-uri referer-uri}]
+             :pixel.event/request-uri request-uri
+             :pixel.event/referer-uri referer-uri
+             :pixel.event/time time}]
            (attach-env event-id env)))))
+
+;;; HTTP routing
 
 (defn generate-response [data & [status]]
   {:status (or status 200)
@@ -72,58 +110,12 @@
    :body (pr-str data)})
 
 (defroutes apiv1-routes
-  (POST "/event" [request-uri referer-uri env]
-    (append-event request-uri referer-uri env)))
+  (POST "/event" [request-uri referer-uri time env]
+        (store-event! request-uri referer-uri time env)))
 
 (defroutes app-routes
   (context "/apiv1" [] (-> apiv1-routes wrap-edn-params))
   (not-found "Not found."))
 
-(def app app-routes)
-
-(defn -main [port]
-  (run-jetty app {:port (Integer. port)}))
-
-(comment
-
-  (let [conn (d/connect db-uri)]
-    (d/transact
-     conn
-     [{:db/id #db/id [:db.part/user]
-       :event/request-uri (URI. "http://abc.com")
-       :event/referer-uri (URI. "http://def.com")}]))
-
-  (d/entity (db (d/connect db-uri))
-            (ffirst (q '[:find ?e :where [?e :event/request-uri]]
-                       (db (d/connect db-uri)))))
-
-  (let [conn (d/connect db-uri)]
-    (d/transact
-     conn
-     [{:db/id #db/id [:db.part/user]
-       :pair/key "foo"
-       :pair/val "bar"}]))
-
-  (let [conn (d/connect db-uri)]
-    (d/transact
-     conn
-     [{:db/id #db/id [:db.part/user]
-       :pair/key "name"
-       :pair/val "Bob"}
-      {:db/id #db/id [:db.part/user]
-       :pair/key "age"
-       :pair/val "38"}]))
-
-  (let [conn (d/connect db-uri)
-        pair-id (d/tempid :db.part/user)]
-    (d/transact
-     conn
-     [[:db/add
-       ;; id of the parent event
-       #db/id[:db.part/user 17592186045420]
-       ;; id of the pair we're adding
-       :event/env #db/id[:db.part/user 17592186045422]]]))
-
-  
-
-  )
+(defn -main [^String port]
+  (run-jetty app-routes {:port (Integer. port)}))
