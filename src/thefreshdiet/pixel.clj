@@ -15,9 +15,11 @@
   should contain, at a minimum, a :db-uri key.  The \"prod\"
   environment key is required."
   {"dev"  {:env :dev
-           :db-uri "datomic:mem://pixel"}
+           :db-uri "datomic:mem://pixel_dev"}
+   "test" {:env :test
+           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}
    "prod" {:env :prod
-           :db-uri ""}})
+           :db-uri "datomic:sql://pixel_prod?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}})
 
 (def cfg
   "Looks at the ENV OS environment variable and derefs to the
@@ -116,6 +118,8 @@ corresponding config map value.  Defaults to prod."
 (defroutes app-routes
   (context "/apiv1" [] (-> apiv1-routes wrap-edn-params))
   (not-found "Not found."))
+
+(def app app-routes)
 
 (defn -main [^String port]
   (run-jetty app-routes {:port (Integer. port)}))
