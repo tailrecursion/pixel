@@ -17,9 +17,9 @@
   {"dev"  {:env :dev
            :db-uri "datomic:mem://pixel_dev"}
    "test" {:env :test
-           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}
+           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}
    "prod" {:env :prod
-           :db-uri "datomic:sql://pixel_prod?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}})
+           :db-uri "datomic:sql://pixel_prod?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}})
 
 (def cfg
   "Looks at the ENV OS environment variable and derefs to the
