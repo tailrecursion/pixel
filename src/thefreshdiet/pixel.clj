@@ -113,7 +113,8 @@ corresponding config map value.  Defaults to prod."
 
 (defroutes apiv1-routes
   (POST "/event" [request-uri referer-uri time env]
-        (store-event! request-uri referer-uri time env)))
+        (store-event! request-uri referer-uri time env)
+        (generate-response {:status :stored})))
 
 (defroutes app-routes
   (context "/apiv1" [] (-> apiv1-routes wrap-edn-params))
