@@ -123,6 +123,7 @@ corresponding config map value.  Defaults to prod."
 (defn store-event!
   "Transacts information about an event."
   [[request-uri
+    request-method
     referer-uri
     time
     status
@@ -140,6 +141,7 @@ corresponding config map value.  Defaults to prod."
       [{:db/id event-id
         :pixel.event/request-uri request-uri
         :pixel.event/referer-uri referer-uri
+        :pixel.event/request-method request-method
         :pixel.event/time time
         :pixel.event/status status}]
       (mapv #(vector :db/add event-id :pixel.event/tags %) tags)
