@@ -25,7 +25,7 @@
   "Looks at the ENV OS environment variable and derefs to the
 corresponding config map value.  Defaults to prod."
   (delay
-   (let [env (or (System/getenv "ENV") "prod")]
+   (let [env (or (System/getenv "ENV") "dev")]
      (assert (contains? envs env))
      (info "pixel environment:" env)
      (get envs env))))
@@ -51,6 +51,11 @@ corresponding config map value.  Defaults to prod."
     :db/valueType :db.type/uri
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/request-method
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/referer-uri
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/uri
@@ -61,7 +66,27 @@ corresponding config map value.  Defaults to prod."
     :db/valueType :db.type/instant
     :db/cardinality :db.cardinality/one
     :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/env
+   {:db/ident :pixel.event/status
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/long
+    :db/cardinality :db.cardinality/one
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/tags
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/many
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/request-headers
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/ref
+    :db/cardinality :db.cardinality/many
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/response-headers
+    :db/id #db/id [:db.part/db]
+    :db/valueType :db.type/ref
+    :db/cardinality :db.cardinality/many
+    :db.install/_attribute :db.part/db}
+   {:db/ident :pixel.event/session
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
@@ -77,32 +102,50 @@ corresponding config map value.  Defaults to prod."
 ;;; Transactions
 
 (defn attach-pair
-  "Provided an event id and a [k v] pair, attaches the pair to the
-  event's environment map.  Returns a tx."
-  [event-id [k v]]
+  "Provided an event id, an attribute name, and a [k v] pair, attaches
+  the pair to the named attributed of the event.  Returns a tx."
+  [event-id attr [k v]]
   (let [pair-id (d/tempid :db.part/user)]
     [[:db/add pair-id :pixel.pair/key k]
      [:db/add pair-id :pixel.pair/val v]
-     [:db/add event-id :pixel.event/env pair-id]]))
+     [:db/add event-id attr pair-id]]))
 
-(defn attach-env
-  "Provided an event id and a map of strings to strings, returns a tx
-  with the env attached."
-  [event-id env]
-  (vec (mapcat (partial attach-pair event-id) (seq env))))
+(defn attach-map
+  "Provided an event id, an attribute name, and a map of strings to
+  strings, returns a tx with the env attached."
+  [event-id attr m]
+  (vec (mapcat (partial attach-pair event-id attr) (seq m))))
+
+(defn concatv
+  [& colls]
+  (reduce into (map vec colls)))
 
 (defn store-event!
   "Transacts information about an event."
-  [request-uri referer-uri time env]
+  [[request-uri
+    referer-uri
+    time
+    status
+    tags
+    request-headers
+    response-headers
+    session
+    :as event]]
+  (println "storing " (pr-str event))
   (let [conn (d/connect (:db-uri @cfg))
         event-id (d/tempid :db.part/user)]
     (d/transact-async
      conn
-     (into [{:db/id event-id
-             :pixel.event/request-uri request-uri
-             :pixel.event/referer-uri referer-uri
-             :pixel.event/time time}]
-           (attach-env event-id env)))))
+     (concatv
+      [{:db/id event-id
+        :pixel.event/request-uri request-uri
+        :pixel.event/referer-uri referer-uri
+        :pixel.event/time time
+        :pixel.event/status status}]
+      (mapv #(vector :db/add event-id :pixel.event/tags %) tags)
+      (attach-map event-id :pixel.event/request-headers request-headers)
+      (attach-map event-id :pixel.event/response-headers response-headers)
+      (attach-map event-id :pixel.event/session session)))))
 
 ;;; HTTP routing
 
@@ -112,8 +155,25 @@ corresponding config map value.  Defaults to prod."
    :body (pr-str data)})
 
 (defroutes apiv1-routes
-  (POST "/event" [request-uri referer-uri time env]
-        (store-event! request-uri referer-uri time env)
+  (POST "/event" [request-uri           ;string
+                  request-method        ;string
+                  referer-uri           ;string
+                  time                  ;java.util.Date
+                  status                ;long
+                  tags                  ;vector of strings
+                  request-headers       ;map of string => string
+                  response-headers      ;map of string => string
+                  session               ;map of string => string
+                  ]
+        (store-event! [request-uri
+                       request-method
+                       referer-uri
+                       time
+                       status
+                       tags
+                       request-headers
+                       response-headers
+                       session])
         (generate-response {:status :stored})))
 
 (defroutes app-routes
