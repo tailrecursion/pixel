@@ -5,7 +5,6 @@
                  [ring/ring-core "1.1.6"]
                  [ring/ring-jetty-adapter "1.1.6"]
                  [compojure "1.1.3"]
-                 [ring-edn "0.1.0"]
                  [org.clojure/tools.logging "0.2.6"]]
   :plugins      [[lein-ring "0.8.3"]]
   :ring {:handler thefreshdiet.pixel/app})

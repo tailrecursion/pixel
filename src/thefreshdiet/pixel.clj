@@ -3,8 +3,9 @@
             [compojure.core        :refer [defroutes context POST]]
             [compojure.route       :refer [not-found]]
             [ring.adapter.jetty    :refer [run-jetty]]
-            [ring.middleware.edn   :refer [wrap-edn-params]]
-            [clojure.tools.logging :refer [info error] :as log])
+            [clojure.tools.logging :refer [info error] :as log]
+            [compojure.handler     :as    handler]
+            [clojure.edn           :as    edn])
   (:import java.net.URI
            java.util.Date))
 
@@ -33,8 +34,6 @@ corresponding config map value.  Defaults to prod."
 ;;; Schema
 
 (def schema
-  "Pixel schema.  Event entities have request URI, referer URI,
-  instant, and environment associations."
   [{:db/ident :pixel.pair/key
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/string
@@ -44,112 +43,87 @@ corresponding config map value.  Defaults to prod."
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db}
-
-   {:db/ident :pixel.event/request-uri
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/uri
-    :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/request-method
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/string
-    :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/referer-uri
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/uri
-    :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/time
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/instant
-    :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/status
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
-    :db/cardinality :db.cardinality/one
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/tags
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/string
-    :db/cardinality :db.cardinality/many
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/request-headers
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/response-headers
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/session
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
     :db.install/_attribute :db.part/db}])
 
 (defn load!
   "Creates the database at db-uri and loads txs. Dev/testing only."
-  [db-uri txs]
-  (d/create-database db-uri)
-  (let [conn (d/connect db-uri)]
-    (d/transact conn txs)))
+  []
+  (d/delete-database (:db-uri @cfg))
+  (d/create-database (:db-uri @cfg))
+  (let [conn (d/connect (:db-uri @cfg))]
+    (d/transact conn schema))
+  (def conn (d/connect (:db-uri @cfg))))
 
 ;;; Transactions
 
 (defn attach-pair
-  "Provided an event id, an attribute name, and a [k v] pair, attaches
+  "Provided an entity id, an attribute name, and a [k v] pair, attaches
   the pair to the named attributed of the event.  Returns a tx."
-  [event-id attr [k v]]
+  [eid attr [k v]]
   (let [pair-id (d/tempid :db.part/user)]
     [[:db/add pair-id :pixel.pair/key k]
      [:db/add pair-id :pixel.pair/val v]
-     [:db/add event-id attr pair-id]]))
+     [:db/add eid attr pair-id]]))
 
 (defn attach-map
-  "Provided an event id, an attribute name, and a map of strings to
+  "Provided an entity id, an attribute name, and a map of strings to
   strings, returns a tx with the env attached."
-  [event-id attr m]
-  (vec (mapcat (partial attach-pair event-id attr) (seq m))))
+  [eid attr m]
+  (vec (mapcat (partial attach-pair eid attr) (seq m))))
 
 (defn concatv
   [& colls]
   (reduce into (map vec colls)))
 
-(defn store-event!
-  "Transacts information about an event."
-  [[request-uri
-    request-method
-    referer-uri
-    time
-    status
-    tags
-    request-headers
-    response-headers
-    session
-    :as event]]
-  (println "storing " (pr-str event))
-  (let [conn (d/connect (:db-uri @cfg))
-        event-id (d/tempid :db.part/user)]
-    (d/transact-async
-     conn
-     (concatv
-      [{:db/id event-id
-        :pixel.event/request-uri request-uri
-        :pixel.event/referer-uri referer-uri
-        :pixel.event/request-method request-method
-        :pixel.event/time time
-        :pixel.event/status status}]
-      (mapv #(vector :db/add event-id :pixel.event/tags %) tags)
-      (attach-map event-id :pixel.event/request-headers request-headers)
-      (attach-map event-id :pixel.event/response-headers response-headers)
-      (attach-map event-id :pixel.event/session session)))))
+(def base-name "pixel.")
 
-;;; HTTP routing
+(defn genschema1
+  "Generates schema for the entity at ns using value type information
+  in v."
+  [ns [k v]]
+  (merge {:db/ident (keyword ns (name k))
+          :db/id (d/tempid :db.part/db)
+          :db.install/_attribute :db.part/db}
+         (cond
+          (string? v)
+          {:db/valueType :db.type/string
+           :db/cardinality :db.cardinality/one}
+          (= Long (class v))
+          {:db/valueType :db.type/long
+           :db/cardinality :db.cardinality/one}
+          (= Double (class v))
+          {:db/valueType :db.type/long
+           :db/cardinality :db.cardinality/one}
+          (map? v)
+          {:db/valueType :db.type/ref
+           :db/cardinality :db.cardinality/many}
+          :else (throw (IllegalArgumentException.
+                        (format "can't make schema for value %s of type %s"
+                                (pr-str v)
+                                (type v)))))))
+
+(defn genschema
+  [ns attr-map]
+  (mapv (partial genschema1 ns) attr-map))
+
+(defn gendata
+  [ns attr-map]
+  (let [{scalars false maps true} (group-by (comp map? second) attr-map)
+        eid (d/tempid :db.part/user)]
+    (apply concatv
+     [(apply merge
+             {:db/id eid}
+             (for [[k v] scalars]
+               [(keyword ns (name k)) v]))]
+     (for [[k v] maps]
+       (attach-map eid (keyword ns (name k)) v)))))
+
+(defn append!
+  [entity-name attr-map]
+  (let [ns (str base-name entity-name)
+        conn (d/connect (:db-uri @cfg))]
+    (d/transact conn (genschema ns attr-map))
+    (d/transact conn (gendata ns attr-map))))
 
 (defn generate-response [data & [status]]
   {:status (or status 200)
@@ -157,32 +131,22 @@ corresponding config map value.  Defaults to prod."
    :body (pr-str data)})
 
 (defroutes apiv1-routes
-  (POST "/event" [request-uri           ;string
-                  request-method        ;string
-                  referer-uri           ;string
-                  time                  ;java.util.Date
-                  status                ;long
-                  tags                  ;vector of strings
-                  request-headers       ;map of string => string
-                  response-headers      ;map of string => string
-                  session               ;map of string => string
-                  ]
-        (store-event! [request-uri
-                       request-method
-                       referer-uri
-                       time
-                       status
-                       tags
-                       request-headers
-                       response-headers
-                       session])
-        (generate-response {:status :stored})))
+  (POST "/entity/:entity-name"
+        [entity-name :as req]
+        (try
+          (let [attr-map (-> req :body slurp edn/read-string)]
+            (append! entity-name attr-map)
+            (println (format "stored a %s%s with %s"
+                             base-name entity-name (pr-str attr-map)))
+            (generate-response {:status :stored}))
+          (catch Throwable t
+            (println (format "ERROR storing a %s%s" base-name entity-name))
+            (generate-response {:status :error, :error t})))))
 
-(defroutes app-routes
-  (context "/apiv1" [] (-> apiv1-routes wrap-edn-params))
+(defroutes app
+  (context "/apiv1" [] (-> apiv1-routes handler/api))
   (not-found "Not found."))
 
-(def app app-routes)
-
 (defn -main [^String port]
-  (run-jetty app-routes {:port (Integer. port)}))
+  (load!)
+  (run-jetty #'app {:port (Integer. port)}))
