@@ -180,6 +180,7 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
           (try
             (let [event (edn/read-string body)]
               (append-event! event)
+              (println (format "%s /apiv1/event" (java.util.Date.)))
               (generate-response {:status :stored}))
             (catch RuntimeException e
               (println "***** STARTERROR *****")
