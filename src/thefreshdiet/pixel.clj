@@ -5,7 +5,7 @@
             [ring.adapter.jetty    :refer [run-jetty]]
             [clojure.tools.logging :refer [info error] :as log]
             [compojure.handler     :as    handler]
-            [clojure.edn           :as    edn])
+            [cheshire.core         :as    json])
   (:import java.net.URI
            java.util.Date))
 
@@ -16,7 +16,7 @@
   {"dev"  {:env :dev
            :db-uri "datomic:mem://pixel_dev"}
    "prod" {:env :test
-           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}})
+           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://jenkins:5432/datomic?user=datomic&password=datomic"}})
 
 (def cfg
   "Looks at the ENV OS environment variable and derefs to the
@@ -178,7 +178,7 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
         [entity-name :as req]
         (let [body (-> req :body slurp)]
           (try
-            (let [event (edn/read-string body)]
+            (let [event (json/parse-string body)]
               (append-event! event)
               (println (format "%s /apiv1/event" (java.util.Date.)))
               (generate-response {:status :stored}))
