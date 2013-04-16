@@ -182,6 +182,7 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
   (POST "/event"
         [entity-name :as req]
         (let [body (-> req :body slurp)]
+;          (spit (str "/tmp/pixel/" (System/currentTimeMillis)) body)
           (try
             (let [event (json/read-str body)]
               (append-event! event)
