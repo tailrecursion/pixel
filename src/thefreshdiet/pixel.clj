@@ -15,10 +15,8 @@
   environment key is required."
   {"dev"  {:env :dev
            :db-uri "datomic:mem://pixel_dev"}
-   "test" {:env :test
-           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}
-   "prod" {:env :prod
-           :db-uri "datomic:sql://pixel_prod?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}})
+   "prod" {:env :test
+           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://localhost:5432/datomic?user=datomic&password=datomic"}})
 
 (def cfg
   "Looks at the ENV OS environment variable and derefs to the
@@ -178,10 +176,16 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
 (defroutes apiv1-routes
   (POST "/event"
         [entity-name :as req]
-        (let [event (-> req :body slurp edn/read-string)]
-          (append-event! event)
-          (println (pr-str {:t (Date.) :event event}))
-          (generate-response {:status :stored}))))
+        (let [body (-> req :body slurp)]
+          (try
+            (let [event (edn/read-string body)]
+              (append-event! event)
+              (generate-response {:status :stored}))
+            (catch RuntimeException e
+              (println "***** STARTERROR *****")
+              (println body)
+              (println "***** ENDERROR *****")
+              (generate-response {:status :error} 500))))))
 
 (defroutes app
   (context "/apiv1" [] (-> apiv1-routes handler/api))
