@@ -6,6 +6,6 @@
                  [ring/ring-jetty-adapter "1.1.6"]
                  [compojure "1.1.3"]
                  [org.clojure/tools.logging "0.2.6"]
-                 [cheshire "5.1.1"]]
+                 [org.clojure/data.json "0.2.2"]]
   :plugins      [[lein-ring "0.8.3"]]
   :ring {:handler thefreshdiet.pixel/app})

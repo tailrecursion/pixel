@@ -5,7 +5,8 @@
             [ring.adapter.jetty    :refer [run-jetty]]
             [clojure.tools.logging :refer [info error] :as log]
             [compojure.handler     :as    handler]
-            [cheshire.core         :as    json])
+            [clojure.data.json     :as    json]
+            [clojure.edn           :as    edn])
   (:import java.net.URI
            java.util.Date))
 
@@ -142,25 +143,29 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
   [eid attrs->maps]
   (reduce concatv (map (fn [[a m]] (attach-map eid a m)) attrs->maps)))
 
+(defn read-time [rfc3339]
+  (edn/read-string (str "#inst" (pr-str rfc3339))))
+
 (defn event-txs
   "Generates a vector of txes provided an event map."
   [event]
   (let [eid (d/tempid :db.part/user)]
     (concatv
      [{:db/id              eid
-       :pixel.event/status (:status event)
-       :pixel.event/time   (:time event)}]
-     (mapv #(vector :db/add eid :pixel.event/tags %) (:tags event))
+       :pixel.event/status (get event ":status")
+       :pixel.event/time   (read-time (get event ":time"))
+       }]
+     (mapv #(vector :db/add eid :pixel.event/tags %) (get event ":tags"))
      (attach-maps eid
-                  {:pixel.event/cookie           (:cookie event)
-                   :pixel.event/env              (:env event)
-                   :pixel.event/files            (:files event)
-                   :pixel.event/get              (:get event)
-                   :pixel.event/post             (:post event)
-                   :pixel.event/request-headers  (:request-headers event)
-                   :pixel.event/response-headers (:response-headers event)
-                   :pixel.event/server           (:server event)
-                   :pixel.event/session          (:session event)}))))
+                  {:pixel.event/cookie           (get event ":cookie")
+                   :pixel.event/env              (get event ":env")
+                   :pixel.event/files            (get event ":files")
+                   :pixel.event/get              (get event ":get")
+                   :pixel.event/post             (get event ":post")
+                   :pixel.event/request-headers  (get event ":request-headers")
+                   :pixel.event/response-headers (get event ":response-headers")
+                   :pixel.event/server           (get event ":server")
+                   :pixel.event/session          (get event ":session")}))))
 
 (defn append-event!
   "Appends the event map to Datomic."
@@ -170,23 +175,23 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
 (defn generate-response
   [data & [status]]
   {:status (or status 200)
-   :headers {"Content-Type" "application/edn"}
-   :body (pr-str data)})
+   :headers {"Content-Type" "application/json"}
+   :body (json/write-str data)})
 
 (defroutes apiv1-routes
   (POST "/event"
         [entity-name :as req]
         (let [body (-> req :body slurp)]
           (try
-            (let [event (json/parse-string body)]
+            (let [event (json/read-str body)]
               (append-event! event)
-              (println (format "%s /apiv1/event" (java.util.Date.)))
-              (generate-response {:status :stored}))
+              (println (java.util.Date.) " /apiv1/event")
+              (generate-response {"status" "stored"}))
             (catch RuntimeException e
               (println "***** STARTERROR *****")
               (println body)
               (println "***** ENDERROR *****")
-              (generate-response {:status :error} 500))))))
+              (generate-response {"status" "error"} 500))))))
 
 (defroutes app
   (context "/apiv1" [] (-> apiv1-routes handler/api))
