@@ -11,13 +11,13 @@
            java.util.Date))
 
 (def envs
-  "Map of environment name strings to settings maps.  Settings maps
-  should contain, at a minimum, a :db-uri key.  The \"prod\"
-  environment key is required."
+  "Map of environment name strings to settings maps."
   {"dev"  {:env :dev
            :db-uri "datomic:mem://pixel_dev"}
-   "prod" {:env :test
-           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://jenkins:5432/datomic?user=datomic&password=datomic"}})
+   "old" {:env :test
+          :db-uri "datomic:sql://pixel_test?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}
+   "prod" {:env :prod
+           :db-uri "datomic:sql://pixel_prod?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}})
 
 (def cfg
   "Looks at the ENV OS environment variable and derefs to the
@@ -36,6 +36,7 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/one
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.pair/val
     :db/id #db/id [:db.part/db]
