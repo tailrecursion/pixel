@@ -17,7 +17,7 @@
    "old" {:env :test
           :db-uri "datomic:sql://pixel_test?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}
    "prod" {:env :prod
-           :db-uri "datomic:sql://pixel_prod?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}})
+           :db-uri "datomic:sql://pixel_prod2?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}})
 
 (def cfg
   "Looks at the ENV OS environment variable and derefs to the
@@ -42,69 +42,82 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/one
+    :db/index true
     :db.install/_attribute :db.part/db}
    ;; maps
    {:db/ident :pixel.event/cookie
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/env
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/files
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/get
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/post
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/request-headers
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/response-headers
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/server
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/session
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}
    ;; scalars
    {:db/ident :pixel.event/status
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/long
     :db/cardinality :db.cardinality/one
+    :db/index true
     :db.install/_attribute :db.part/db}
    {:db/ident :pixel.event/time
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/instant
     :db/cardinality :db.cardinality/one
+    :db/index true
     :db.install/_attribute :db.part/db}
    ;; collections
    {:db/ident :pixel.event/tags
     :db/id #db/id [:db.part/db]
     :db/valueType :db.type/string
     :db/cardinality :db.cardinality/many
+    :db/index true
     :db.install/_attribute :db.part/db}])
 
 (defn load!
