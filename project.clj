@@ -8,4 +8,5 @@
                  [org.clojure/tools.logging "0.2.6"]
                  [org.clojure/data.json "0.2.2"]]
   :plugins      [[lein-ring "0.8.3"]]
-  :ring {:handler thefreshdiet.pixel/app})
+  :ring {:handler thefreshdiet.pixel/app}
+  :main thefreshdiet.pixel)
