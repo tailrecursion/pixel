@@ -9,4 +9,7 @@
                  [org.clojure/data.json "0.2.2"]]
   :plugins      [[lein-ring "0.8.3"]]
   :ring {:handler thefreshdiet.pixel/app}
-  :main thefreshdiet.pixel)
+  :main thefreshdiet.pixel
+  :jvm-opts ["-Ddatomic.memcacheServers=jenkins.thefreshdiet.trmk:11211"]
+  :repl-options {:host "jenkins.thefreshdiet.trmk"
+                 :port 4005})
