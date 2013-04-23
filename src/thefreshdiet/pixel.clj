@@ -214,4 +214,4 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
   (not-found "Not found."))
 
 (defn -main [^String port]
-  (run-jetty #'app {:port (Integer. port)}))
+  (run-jetty app {:port (Integer. port)}))
