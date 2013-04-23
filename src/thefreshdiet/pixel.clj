@@ -1,6 +1,6 @@
 (ns thefreshdiet.pixel
   (:require [datomic.api           :refer [q db] :as d]
-            [compojure.core        :refer [defroutes context POST]]
+            [compojure.core        :refer [defroutes context POST OPTIONS]]
             [compojure.route       :refer [not-found]]
             [ring.adapter.jetty    :refer [run-jetty]]
             [clojure.tools.logging :refer [info error] :as log]
@@ -193,6 +193,7 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
    :body (json/write-str data)})
 
 (defroutes apiv1-routes
+  (OPTIONS "/" [req] (generate-response {"status" "ok"}))
   (POST "/event"
         [entity-name :as req]
         (let [body (-> req :body slurp)]
