@@ -19,6 +19,10 @@
      (-> resource slurp edn/read-string)
      (throw (RuntimeException. "No config.edn found for this environment.")))))
 
+(def conn
+  (delay
+   (d/connect (-> @config :datomic :uri))))
+
 ;;; application
 
 (def schema
@@ -33,7 +37,9 @@
   (edn/read-string (str "#inst" (pr-str rfc3339))))
 
 (defn format-event [event]
-  (update-in event ["time"] read-time))
+  (if (contains? event "time")
+    (update-in event ["time"] read-time)
+    event))
 
 (defn generate-response
   [data & [status]]
@@ -41,16 +47,19 @@
    :headers {"Content-Type" "application/json"}
    :body (json/write-str data)})
 
-(def ^:dynamic *conn* nil)
-
 (defroutes apiv1-routes
   (OPTIONS "/" [req] (generate-response {"status" "ok"}))
   (POST "/event"
         [entity-name :as req]
-        (log/info "serving /apiv1/event")
-        (let [event (-> req :body slurp json/read-str format-event)]
-          (d/transact-async *conn* (datoms event (d/tempid :db.part/user) :pixel.event/ref))
-          (generate-response {"status" "stored"}))))
+        (try
+          (let [event (-> req :body slurp json/read-str format-event)]
+            (d/transact-async
+             @conn
+             (datoms event (d/tempid :db.part/user) :pixel.event/ref))
+            (generate-response {"status" "stored"}))
+          (catch Throwable t
+            (log/error "Error serving /apiv1/event" t)
+            (generate-response {"status" "error"} 500)))))
 
 (defroutes app
   (context "/apiv1" [] (-> apiv1-routes handler/api))
@@ -66,5 +75,4 @@
   (when-let [repl-options (:repl-options @config)]
     (apply nrepl/start-server (apply concat repl-options)))
   ;; connect to datomic and start jetty
-  (binding [*conn* (d/connect (-> @config :datomic :uri))]
-    (run-jetty #'app (:jetty-options @config))))
+  (run-jetty #'app (:jetty-options @config)))
