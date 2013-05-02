@@ -32,4 +32,5 @@
              :jenkins.thefreshdiet.trmk-3000
              [:production-shared
               {:resource-paths ["envs/jenkins.thefreshdiet.trmk-3000"]
-               :jvm-opts ["-Ddatomic.memcacheServers=jenkins.thefreshdiet.trmk:11211"]}]})
+               :jvm-opts ["-Ddatomic.memcacheServers=jenkins.thefreshdiet.trmk:11211"
+                          "-Xss16M"]}]})
