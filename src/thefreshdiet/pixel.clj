@@ -1,190 +1,39 @@
 (ns thefreshdiet.pixel
-  (:require [datomic.api           :refer [q db] :as d]
-            [compojure.core        :refer [defroutes context POST OPTIONS]]
-            [compojure.route       :refer [not-found]]
-            [ring.adapter.jetty    :refer [run-jetty]]
-            [clojure.tools.logging :refer [info error] :as log]
-            [compojure.handler     :as    handler]
-            [clojure.data.json     :as    json]
-            [clojure.edn           :as    edn])
-  (:import java.net.URI
-           java.util.Date))
+  (:require [datomic.api                :refer [q db] :as d]
+            [compojure.core             :refer [defroutes context POST OPTIONS]]
+            [compojure.route            :refer [not-found]]
+            [ring.adapter.jetty         :refer [run-jetty]]
+            [tailrecursion.monocopy     :refer [datoms hydrate] :as mc]
+            [compojure.handler          :as    handler]
+            [clojure.data.json          :as    json]
+            [clojure.edn                :as    edn]
+            [clojure.java.io            :as    io]
+            [clojure.tools.logging      :as    log]
+            [clojure.tools.nrepl.server :as    nrepl]))
 
-(def envs
-  "Map of environment name strings to settings maps."
-  {"dev"  {:env :dev
-           :db-uri "datomic:mem://pixel_dev"}
-   "old" {:env :test
-          :db-uri "datomic:sql://pixel_test?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}
-   "prod" {:env :prod
-           :db-uri "datomic:sql://pixel_prod2?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}})
+;;; configuration
 
-(def cfg
-  "Looks at the ENV OS environment variable and derefs to the
-corresponding config map value.  Defaults to dev (in-memory Datomic)."
+(def config
   (delay
-   (let [env (or (System/getenv "ENV") "dev")]
-     (assert (contains? envs env))
-     (info "pixel environment:" env)
-     (get envs env))))
+   (if-let [resource (io/resource "config.edn")]
+     (-> resource slurp edn/read-string)
+     (throw (RuntimeException. "No config.edn found for this environment.")))))
 
-;;; Schema
+;;; application
 
 (def schema
-  [;; string => string map support
-   {:db/ident :pixel.pair/key
+  [{:db/doc "Points to a monocopy map of event information."
+    :db/ident :pixel.event/ref
     :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/string
+    :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/one
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.pair/val
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/string
-    :db/cardinality :db.cardinality/one
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   ;; maps
-   {:db/ident :pixel.event/cookie
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/env
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/files
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/get
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/post
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/request-headers
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/response-headers
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/server
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/session
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/ref
-    :db/cardinality :db.cardinality/many
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   ;; scalars
-   {:db/ident :pixel.event/status
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/long
-    :db/cardinality :db.cardinality/one
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   {:db/ident :pixel.event/time
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/instant
-    :db/cardinality :db.cardinality/one
-    :db/index true
-    :db.install/_attribute :db.part/db}
-   ;; collections
-   {:db/ident :pixel.event/tags
-    :db/id #db/id [:db.part/db]
-    :db/valueType :db.type/string
-    :db/cardinality :db.cardinality/many
-    :db/index true
     :db.install/_attribute :db.part/db}])
-
-(defn load!
-  "Creates the database at db-uri and loads txs. Dev/testing only."
-  []
-  (d/delete-database (:db-uri @cfg))
-  (d/create-database (:db-uri @cfg))
-  (let [conn (d/connect (:db-uri @cfg))]
-    (d/transact conn schema))
-  (when (= :dev (:env @cfg))
-    (def conn (d/connect (:db-uri @cfg)))))
-
-(defn attach-pair
-  "Provided an entity id, an attribute name, and a [k v] pair, attaches
-  the pair to the named attributed of the event.  Returns a tx."
-  [eid attr [k v]]
-  (let [pair-id (d/tempid :db.part/user)]
-    [[:db/add pair-id :pixel.pair/key k]
-     [:db/add pair-id :pixel.pair/val v]
-     [:db/add eid attr pair-id]]))
-
-(defn attach-map
-  "Provided an entity id, an attribute name, and a map of strings to
-  strings, returns a tx with the env attached."
-  [eid attr m]
-  {:pre [(map? m)]}
-  (vec (mapcat (partial attach-pair eid attr) (seq m))))
-
-(defn concatv
-  "Converts colls to vectors and concatenates them into a vector"
-  [& colls]
-  (reduce into (map vec colls)))
-
-(defn attach-maps
-  "Provided an eid and a map of ident keywords to string->string maps,
-  emits txes for associating the maps with eid."
-  [eid attrs->maps]
-  (reduce concatv (map (fn [[a m]] (attach-map eid a m)) attrs->maps)))
 
 (defn read-time [rfc3339]
   (edn/read-string (str "#inst" (pr-str rfc3339))))
 
-(defn event-txs
-  "Generates a vector of txes provided an event map."
-  [event]
-  (let [eid (d/tempid :db.part/user)]
-    (concatv
-     [{:db/id              eid
-       :pixel.event/status (get event ":status")
-       :pixel.event/time   (read-time (get event ":time"))
-       }]
-     (mapv #(vector :db/add eid :pixel.event/tags %) (get event ":tags"))
-     (attach-maps eid
-                  {:pixel.event/cookie           (get event ":cookie")
-                   :pixel.event/env              (get event ":env")
-                   :pixel.event/files            (get event ":files")
-                   :pixel.event/get              (get event ":get")
-                   :pixel.event/post             (get event ":post")
-                   :pixel.event/request-headers  (get event ":request-headers")
-                   :pixel.event/response-headers (get event ":response-headers")
-                   :pixel.event/server           (get event ":server")
-                   :pixel.event/session          (get event ":session")}))))
-
-(defn append-event!
-  "Appends the event map to Datomic."
-  [event]
-  (d/transact-async (d/connect (:db-uri @cfg)) (event-txs event)))
+(defn format-event [event]
+  (update-in event ["time"] read-time))
 
 (defn generate-response
   [data & [status]]
@@ -192,26 +41,30 @@ corresponding config map value.  Defaults to dev (in-memory Datomic)."
    :headers {"Content-Type" "application/json"}
    :body (json/write-str data)})
 
+(def ^:dynamic *conn* nil)
+
 (defroutes apiv1-routes
   (OPTIONS "/" [req] (generate-response {"status" "ok"}))
   (POST "/event"
         [entity-name :as req]
-        (let [body (-> req :body slurp)]
-;          (spit (str "/tmp/pixel/" (System/currentTimeMillis)) body)
-          (try
-            (let [event (json/read-str body)]
-              (append-event! event)
-              (println (java.util.Date.) " /apiv1/event")
-              (generate-response {"status" "stored"}))
-            (catch RuntimeException e
-              (println "***** STARTERROR *****")
-              (println body)
-              (println "***** ENDERROR *****")
-              (generate-response {"status" "error"} 500))))))
+        (log/info "serving /apiv1/event")
+        (let [event (-> req :body slurp json/read-str format-event)]
+          (d/transact-async *conn* (datoms event (d/tempid :db.part/user) :pixel.event/ref))
+          (generate-response {"status" "stored"}))))
 
 (defroutes app
   (context "/apiv1" [] (-> apiv1-routes handler/api))
   (not-found "Not found."))
 
-(defn -main [^String port]
-  (run-jetty app {:port (Integer. port)}))
+(defn -main [& args]
+  ;; create in-memory datomic, transact schema when in :dev mode
+  (when (= (:env @config) :dev)
+    (d/create-database (-> @config :datomic :uri))
+    (d/transact (d/connect (-> @config :datomic :uri))
+                (concat mc/schema schema)))
+  ;; start a repl server if configured
+  (when-let [repl-options (:repl-options @config)]
+    (apply nrepl/start-server (apply concat repl-options)))
+  ;; connect to datomic and start jetty
+  (binding [*conn* (d/connect (-> @config :datomic :uri))]
+    (run-jetty #'app (:jetty-options @config))))

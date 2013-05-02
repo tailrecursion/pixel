@@ -1,0 +1,4 @@
+{:env :dev
+ :jetty-options {:port 3000}
+ :repl-options {:port 4005}
+ :datomic {:uri "datomic:mem://pixel_dev"}}
