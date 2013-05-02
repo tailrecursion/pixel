@@ -57,12 +57,14 @@
   (not-found "Not found."))
 
 (defn -main [& args]
-  ;; create in-memory datomic when in :dev mode
-  (when (= (-> @config :env) :dev)
-    (d/create-database (-> @config :datomic :uri)))
+  ;; create in-memory datomic, transact schema when in :dev mode
+  (when (= (:env @config) :dev)
+    (d/create-database (-> @config :datomic :uri))
+    (d/transact (d/connect (-> @config :datomic :uri))
+                (concat mc/schema schema)))
   ;; start a repl server if configured
-  (when-let [repl-options (-> @config :repl-options)]
+  (when-let [repl-options (:repl-options @config)]
     (apply nrepl/start-server (apply concat repl-options)))
-  ;; connect to datomic and start serving
+  ;; connect to datomic and start jetty
   (binding [*conn* (d/connect (-> @config :datomic :uri))]
-    (run-jetty #'app (-> @config :jetty-options))))
+    (run-jetty #'app (:jetty-options @config))))
