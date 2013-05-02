@@ -9,6 +9,16 @@ Datomic-based usage tracking of freshdiet-app.
 * Download the version of [Datomic Pro](http://downloads.datomic.com/pro.html) specified in the `project.clj`.
 * Run `bin/maven-install` to install the artifact locally.
 
+## Querying Production
+
+Start a local peer with production settings by running:
+
+    lein with-profile jenkins.thefreshdiet.trmk-3000 repl
+
+Then, `(require 'thefreshdiet.pixel)` and `(in-ns 'thefreshdiet.pixel)`.  Once in the namespace, you can run a query like:
+
+    (q '[:find (count ?p) :where [?p :pixel.event/ref]] (db @conn))
+
 ## Running
 
 Logging behavior, port numbers, hosts, and nREPL options are all Leiningen profile directed.  See the profiles listed in `project.clj`.  For each profile there is a directory in `envs/` that is added to the resource path per-profile.  This directory contains further runtime and logging configuration as informed by the `config.edn` and `log4j.properties` files.
