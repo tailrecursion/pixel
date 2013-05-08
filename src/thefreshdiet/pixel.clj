@@ -36,10 +36,20 @@
 (defn read-time [rfc3339]
   (edn/read-string (str "#inst" (pr-str rfc3339))))
 
+(defn strip
+  "Removes everything except scalars and maps from expr."
+  [expr]
+  (let [pred #(or (not (coll? %)) (map? %))]
+    (if (map? expr)
+      (into {} (for [[k v] expr :when (pred v)]
+                 [k (strip v)]))
+      (if (pred expr) expr))))
+
 (defn format-event [event]
-  (if (contains? event "time")
-    (update-in event ["time"] read-time)
-    event))
+  (let [stripped (strip event)]
+    (if (contains? stripped "time")
+      (update-in stripped ["time"] read-time)
+      stripped)))
 
 (defn generate-response
   [data & [status]]
