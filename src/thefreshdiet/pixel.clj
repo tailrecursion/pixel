@@ -69,7 +69,7 @@
             (generate-response {"status" "stored"}))
           (catch Throwable t
             (log/error "Error serving /apiv1/event" t)
-            (generate-response {"status" "error"} 500)))))
+            (generate-response {"status" "error"} 200)))))
 
 (defroutes app
   (context "/apiv1" [] (-> apiv1-routes handler/api))
