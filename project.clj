@@ -16,7 +16,7 @@
   :main thefreshdiet.pixel
   :profiles {:dev
              {:resource-paths ["envs/dev"]
-              :dependencies [[tailrecursion/monocopy "1.0.9"
+              :dependencies [[tailrecursion/monocopy "1.0.10-SNAPSHOT"
                               :exclusions [org.clojure/clojure
                                            org.slf4j/slf4j-nop
                                            org.slf4j/log4j-over-slf4j]]]
