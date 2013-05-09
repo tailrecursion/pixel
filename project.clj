@@ -27,7 +27,7 @@
                               :exclusions [org.clojure/clojure
                                            org.slf4j/slf4j-nop
                                            org.slf4j/log4j-over-slf4j]]
-                             [tailrecursion/monocopy "1.0.9"
+                             [tailrecursion/monocopy "1.0.10-SNAPSHOT"
                               :exclusions [com.datomic/datomic-free]]]}
              :jenkins.thefreshdiet.trmk-3000
              [:production-shared
