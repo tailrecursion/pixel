@@ -1,4 +1,4 @@
-(defproject thefreshdiet/pixel "1.0.0-SNAPSHOT"
+(defproject tailrecursion/pixel "1.0.0-SNAPSHOT"
   :description "TFD usage tracking server."
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [ring/ring-core "1.1.6"]
@@ -13,7 +13,7 @@
                                com.sun.jmx/jmxri]]
                  [org.slf4j/slf4j-log4j12 "1.6.6"]
                  [org.clojure/tools.nrepl "0.2.2"]]
-  :main thefreshdiet.pixel
+  :main tailrecursion.pixel
   :profiles {:dev
              {:resource-paths ["envs/dev"]
               :dependencies [[tailrecursion/monocopy "1.0.10-SNAPSHOT"

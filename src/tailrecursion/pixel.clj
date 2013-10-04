@@ -1,4 +1,4 @@
-(ns thefreshdiet.pixel
+(ns tailrecursion.pixel
   (:require [datomic.api                :refer [q db] :as d]
             [compojure.core             :refer [defroutes context POST OPTIONS]]
             [compojure.route            :refer [not-found]]
