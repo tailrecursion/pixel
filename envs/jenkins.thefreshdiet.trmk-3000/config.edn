@@ -1,5 +1,0 @@
-{:env :jenkins.thefreshdiet.trmk-3000
- :jetty-options {:port 3000}
- :repl-options {:port 4005
-                :host "jenkins.thefreshdiet.trmk"}
- :datomic {:uri "datomic:sql://pixel_prod?jdbc:postgresql://jenkins.thefreshdiet.trmk:5432/datomic?user=datomic&password=datomic"}}
