@@ -21,17 +21,4 @@
                                            org.slf4j/slf4j-nop
                                            org.slf4j/log4j-over-slf4j]]]
               :plugins      [[lein-ring "0.8.3"]]
-              :ring {:handler thefreshdiet.pixel/app}}
-             :production-shared
-             {:dependencies [[com.datomic/datomic-pro "0.8.3862"
-                              :exclusions [org.clojure/clojure
-                                           org.slf4j/slf4j-nop
-                                           org.slf4j/log4j-over-slf4j]]
-                             [tailrecursion/monocopy "1.0.10-SNAPSHOT"
-                              :exclusions [com.datomic/datomic-free]]]}
-             :jenkins.thefreshdiet.trmk-3000
-             [:production-shared
-              {:resource-paths ["envs/jenkins.thefreshdiet.trmk-3000"]
-               :jvm-opts ["-Ddatomic.memcacheServers=jenkins.thefreshdiet.trmk:11211"
-                          "-Xss16M"
-                          "-Xmx6g"]}]})
+              :ring {:handler tailrecursion.pixel/app}}})
